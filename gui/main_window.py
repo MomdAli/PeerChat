@@ -5,8 +5,8 @@ from gui.chat_frame import ChatFrame
 class MainWindow:
     def __init__(self, root):
         self.root = root
-        self.root.title("Peer-to-Peer Chat Client")
-        self.root.geometry("900x650")
+        self.root.title("PeerChat")
+        self.root.geometry("800x1000")
         self.root.resizable(True, True)
         self.current_frame = None
         self.show_login()
