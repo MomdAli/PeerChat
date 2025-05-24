@@ -1,64 +1,96 @@
-# PeerChat Protokoll
+# PeerChat Protokoll-Spezifikation
 
-## Nachrichtenformate
+## Übersicht
+Dieses Dokument beschreibt die Protokolle für die Kommunikation im PeerChat-System:
+- **Client-Server-Protokoll** (TCP): Registrierung, Broadcast, Peer-Informationen
+- **Peer-to-Peer-Protokoll** (TCP): Chat-Anfragen, Chat-Nachrichten, Verbindungsmanagement
+- **UDP-Hinweise**: Peer-Discovery, Paketverlust
 
-### Client → Server
+Die Protokolle spezifizieren Nachrichtenformate, erlaubte Nachrichtenreihenfolgen und das Verhalten bei Fehlern ("good path" und "bad path").
 
+---
+
+## 1. Client-Server-Protokoll (TCP)
+
+### Nachrichtenformate
 - `REGISTER <nickname> <udp_port>`
-    - Registriert einen neuen Benutzer.
-    - Antwort: `NICKNAME_TAKEN` oder `JOINED ...` oder `ERROR <reason>`
-
-### Server → Client
-
-- `NICKNAME_TAKEN`
-    - Nickname ist bereits vergeben.
-- `ERROR <reason>`
-    - Bei falsch formatierten oder unerwarteten Nachrichten.
+  → Registrierung eines Clients. Antwort: `NICKNAME_TAKEN`, `JOINED ...` oder `ERROR <reason>`
+- `PORT <nickname> <tcp_port>`
+  → Übermittlung des eigenen TCP-Ports nach erfolgreicher Registrierung.
 - `JOINED <nickname> <ip> <udp_port> <tcp_port>`
-    - Ein Benutzer ist dem Chat beigetreten.
+  → Ein Peer ist dem Chat beigetreten (Server → Client).
 - `LEFT <nickname>`
-    - Ein Benutzer hat den Chat verlassen.
+  → Ein Peer hat den Chat verlassen (Server → Client).
+- `BROADCAST <message>`
+  → Nachricht an alle Clients (Client → Server → alle Clients).
+- `NICKNAME_TAKEN`
+  → Nickname ist bereits vergeben (Server → Client).
+- `ERROR <reason>`
+  → Fehlerhafte, unerwartete oder ungültige Nachricht (Server → Client).
 
-## Fehlerfälle
+### Ablauf (Reihenfolge)
+1. Client → Server: `REGISTER ...`
+2. Server → Client: `JOINED ...` (eigene Registrierung und alle anderen Peers)
+3. Client → Server: `PORT ...`
+4. Danach: `BROADCAST ...` und weitere Nachrichten erlaubt
 
-- Bei falsch formatierten Nachrichten:
-  `ERROR Invalid <command> format`
-- Bei unbekannten Nachrichten:
-  `ERROR Unknown command`
-- Bei Nickname-Konflikt:
-  `NICKNAME_TAKEN`
+### Fehlerfälle ("bad path")
+- Falsches Format, doppelte Registrierung, unerwartete Nachrichten: `ERROR <reason>`
+- Nickname-Konflikt: `NICKNAME_TAKEN`
 
-## UDP Hinweise
+---
 
-- UDP-Nachrichten können verloren gehen. Kritische Nachrichten sollten ggf. wiederholt oder bestätigt werden (ACK/NACK Mechanismus ist optional und aktuell nicht implementiert).
-- Für Peer-Discovery und nicht-kritische Nachrichten wird Paketverlust toleriert.
-- Für kritische Nachrichten (z.B. Chat-Anfragen) empfiehlt sich eine Wiederholung nach Timeout, falls keine Antwort empfangen wird.
+## 2. Peer-to-Peer-Protokoll (TCP)
 
-## Timeouts und Verbindungsabbrüche
+### Nachrichtenformate
+- `CHAT_REQUEST <nickname>`
+  → Anfrage, einen privaten Chat zu starten
+- `CHAT_ACCEPT <nickname>`
+  → Annahme der Chat-Anfrage
+- `CHAT_REJECT <nickname>`
+  → Ablehnung der Chat-Anfrage
+- `LEFT_CHAT <nickname>`
+  → Peer verlässt den privaten Chat
+- `CHAT_MSG <nickname> <message>`
+  → Chat-Nachricht zwischen Peers
+- `ERROR <reason>`
+  → Fehlerhafte, unerwartete oder ungültige Nachricht
 
-- Wenn nach einer Anfrage (z.B. CHAT_REQUEST) innerhalb eines definierten Zeitraums keine Antwort (ACCEPT/REJECT) empfangen wird, sollte der Client den Benutzer informieren und die Anfrage als fehlgeschlagen betrachten.
-- Bei Verbindungsabbruch (z.B. keine Daten mehr über TCP, oder explizite Fehlermeldung) wird der Benutzer informiert und die Verbindung geschlossen.
-- Es werden keine expliziten Keepalive/Heartbeat-Nachrichten gesendet, aber dies kann für eine robustere Implementierung ergänzt werden.
+### Ablauf (Reihenfolge)
+1. Peer A → Peer B: `CHAT_REQUEST ...`
+2. Peer B → Peer A: `CHAT_ACCEPT ...` oder `CHAT_REJECT ...`
+3. Nach Annahme: `CHAT_MSG ...` beliebig oft in beide Richtungen
+4. Beenden: `LEFT_CHAT ...`
 
-## Zustandsautomat (State Machine)
+### Fehlerfälle ("bad path")
+- Falsches Format, unerwartete Nachrichten: `ERROR <reason>`
+- Keine Antwort auf Chat-Anfrage: Timeout, Verbindung wird geschlossen
 
-- Ein Client muss sich zuerst mit REGISTER anmelden und auf JOINED warten, bevor weitere Nachrichten gesendet werden.
-- Erst nach erfolgreicher Registrierung dürfen BROADCAST, PORT und andere Nachrichten gesendet werden.
-- Der Server akzeptiert keine weiteren REGISTER-Nachrichten nach erfolgreicher Anmeldung.
-- Nachrichten, die nicht zum aktuellen Zustand passen (z.B. BROADCAST vor Registrierung), werden mit ERROR beantwortet.
-- Peer-to-peer: CHAT_REQUEST darf nur gesendet werden, wenn eine TCP-Verbindung zu einem Peer besteht.
-- Nach einem LEFT_CHAT oder Verbindungsabbruch ist keine weitere Kommunikation erlaubt.
+---
 
-## Beispiel für erlaubte Nachrichtenreihenfolge
+## 3. UDP-Hinweise
+- UDP wird für Peer-Discovery oder optionale Nachrichten genutzt.
+- **Paketverlust ist möglich!** Kritische Nachrichten sollten ggf. wiederholt oder bestätigt werden (ACK/NACK optional).
+- Für nicht-kritische Nachrichten wird Paketverlust toleriert.
 
-1. Client → Server: REGISTER <nickname> <udp_port>
-2. Server → Client: JOINED ...
-3. Client → Server: PORT <nickname> <tcp_port>
-4. Server → Client: JOINED ... (für andere Peers)
-5. Client → Server: BROADCAST <message>
-6. Peer-to-peer: CHAT_REQUEST <nickname>
-7. Peer-to-peer: CHAT_ACCEPT/CHAT_REJECT <nickname>
-8. Peer-to-peer: LEFT_CHAT <nickname>
+---
+
+## 4. TCP-Bytestrom und Nachrichtenextraktion
+- Alle TCP-Nachrichten werden mit einer 10-Byte-Längenpräfixierung übertragen, sodass Nachrichten eindeutig aus dem Bytestrom extrahiert werden können.
+
+---
+
+## 5. Zustandsautomat (State Machine)
+- Ein Client muss sich zuerst registrieren (`REGISTER`), dann den eigenen Port senden (`PORT`), bevor weitere Nachrichten erlaubt sind.
+- Der Server akzeptiert keine weiteren `REGISTER`-Nachrichten nach erfolgreicher Anmeldung.
+- Nachrichten, die nicht zum aktuellen Zustand passen, werden mit `ERROR` beantwortet.
+- Peer-to-Peer: Erst nach erfolgreichem Handshake (`CHAT_REQUEST`/`CHAT_ACCEPT`) dürfen Chat-Nachrichten gesendet werden.
+
+---
+
+## 6. Fehlerbehandlung
+- Jede falsch formatierte, unerwartete oder ausbleibende Nachricht wird mit `ERROR <reason>` beantwortet.
+- Bei Verbindungsabbruch oder Timeout wird die Verbindung geschlossen und der Benutzer informiert.
 
 ---
 
