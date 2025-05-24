@@ -54,7 +54,7 @@ python -m client.main
 
 ## Screenshots
 
-> (Yet to come)
+> ![screenshot-1](screenshots/screenshot-1.png)
 
 ---
 

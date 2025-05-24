@@ -17,7 +17,7 @@ class PeerList(ttk.Frame):
         self.peer_list_label.pack(fill='x', padx=2, pady=(0,2))
 
         # Peer list
-        self.listbox = tk.Listbox(self, height=13, width=20,
+        self.listbox = tk.Listbox(self, height=15, width=20,
                                  font=Theme.get_text_font(),
                                  bg=COLORS['chat_bg'],
                                  fg=COLORS['button_text'],
@@ -45,7 +45,7 @@ class PeerList(ttk.Frame):
         self.logged_in_label = tk.Label(self, text=f"Logged in as: {self.client.nickname}",
                                       font=Theme.get_text_font(),
                                       bg=COLORS['background'],
-                                      fg=COLORS['text'])
+                                      fg=COLORS['accent'])
         self.logged_in_label.pack(anchor='w', pady=(0,8))
 
     def refresh_peers(self, peers, local_nickname):
@@ -63,8 +63,13 @@ class PeerList(ttk.Frame):
                 nicknames.append(nickname)
 
         # Sort and display nicknames
-        for nickname in sorted(nicknames):
+        for idx, nickname in enumerate(sorted(nicknames)):
             self.listbox.insert(tk.END, nickname)
+            # Alternate row color for better readability
+            if idx % 2 == 0:
+                self.listbox.itemconfig(idx, bg=COLORS['chat_bg'])
+            else:
+                self.listbox.itemconfig(idx, bg=COLORS['entry_bg'])
 
     def _on_connect_peer(self):
         """Handle manual peer connection"""

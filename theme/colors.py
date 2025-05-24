@@ -5,6 +5,7 @@ COLORS = {
     'text': '#cdd6f4',        # Main text color
     'border': '#313244',      # Border color
     'accent': '#89b4fa',      # Accent color
+    'timestamp': '#94e2d5',   # Teal for timestamps
 
     # Button colors
     'button_bg': '#45475a',

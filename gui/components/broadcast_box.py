@@ -32,6 +32,11 @@ class BroadcastBox(ttk.Frame):
                            highlightthickness=1)
         self.text.pack(fill='x', padx=2, pady=(0,8))
 
+        # Configure color tags
+        self.text.tag_config('timestamp', foreground=COLORS['timestamp'])
+        self.text.tag_config('broadcast', foreground=COLORS['broadcast'])
+        self.text.tag_config('error', foreground=COLORS['system_error'])
+
         # Broadcast button
         self.broadcast_btn = tk.Button(self, text="Broadcast",
                                      command=self._on_broadcast,
@@ -64,8 +69,9 @@ class BroadcastBox(ttk.Frame):
         """
         self.text.configure(state="normal")
         timestamp = time.strftime("%H:%M:%S")
-        color = COLORS['system_error'] if is_error else COLORS['broadcast']
-        self.text.insert(tk.END, f"[{timestamp}] {message}\n", color)
+        tag = 'error' if is_error else 'broadcast'
+        self.text.insert(tk.END, f"[{timestamp}] ", 'timestamp')
+        self.text.insert(tk.END, f"{message}\n", tag)
         self.text.configure(state="disabled")
         self.text.see(tk.END)
 

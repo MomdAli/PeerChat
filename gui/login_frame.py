@@ -20,14 +20,14 @@ class LoginFrame(ttk.Frame):
         header = ttk.Label(self, text="Login",
                           font=Theme.get_header_font(),
                           background=COLORS['background'],
-                          foreground=COLORS['text'])
+                          foreground=COLORS['accent'])
         header.grid(row=0, column=0, columnspan=2, pady=(0, 20))
 
         # Nickname field
         ttk.Label(self, text="Nickname:",
                  font=Theme.get_text_font(),
                  background=COLORS['background'],
-                 foreground=COLORS['text']).grid(row=1, column=0, sticky="e", pady=6)
+                 foreground=COLORS['system_info']).grid(row=1, column=0, sticky="e", pady=6)
 
         self.nickname_entry = tk.Entry(self,
                                      font=Theme.get_entry_font(),
@@ -42,7 +42,7 @@ class LoginFrame(ttk.Frame):
         ttk.Label(self, text="Server IP:",
                  font=Theme.get_text_font(),
                  background=COLORS['background'],
-                 foreground=COLORS['text']).grid(row=2, column=0, sticky="e", pady=6)
+                 foreground=COLORS['system_info']).grid(row=2, column=0, sticky="e", pady=6)
 
         self.server_entry = tk.Entry(self,
                                    font=Theme.get_entry_font(),
@@ -58,7 +58,7 @@ class LoginFrame(ttk.Frame):
         ttk.Label(self, text="Server Port:",
                  font=Theme.get_text_font(),
                  background=COLORS['background'],
-                 foreground=COLORS['text']).grid(row=3, column=0, sticky="e", pady=6)
+                 foreground=COLORS['system_info']).grid(row=3, column=0, sticky="e", pady=6)
 
         self.port_entry = tk.Entry(self,
                                  font=Theme.get_entry_font(),

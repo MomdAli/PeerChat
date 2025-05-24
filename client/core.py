@@ -1,14 +1,8 @@
+from network.tcp import send_message, recv_message
+from network.udp import listen_for_udp
+import network.protocol as prot
 import socket
 import threading
-from network.tcp import send_message, recv_message
-from network.udp import listen_for_udp, send_udp
-from network.protocol import (
-    make_chat_request, is_chat_request, parse_chat_request,
-    make_chat_accept, is_chat_accept, parse_chat_accept,
-    make_chat_reject, is_chat_reject, parse_chat_reject,
-    make_left_chat, is_left_chat, parse_left_chat,
-    make_joined, make_left, make_broadcast, make_port, parse_port
-)
 
 class PeerClient:
     def __init__(self, server_ip, server_port, nickname, udp_port, tcp_port=None):
@@ -38,10 +32,9 @@ class PeerClient:
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect((self.server_ip, self.server_port))
-            register_msg = f"REGISTER {self.nickname} {self.udp_port}"
-            send_message(sock, register_msg)
+            send_message(sock, f"REGISTER {self.nickname} {self.udp_port}")
             if self.tcp_port:
-                send_message(sock, make_port(self.nickname, self.tcp_port))
+                send_message(sock, prot.make_port(self.nickname, self.tcp_port))
             self.server_sock = sock
             self._cb('on_info', f"Registered with server {self.server_ip}:{self.server_port} as {self.nickname} on UDP port {self.udp_port} and TCP port {self.tcp_port}")
             self.server_listener_thread = threading.Thread(target=self._listen_to_server, daemon=True)
@@ -56,7 +49,13 @@ class PeerClient:
                 msg = recv_message(sock)
                 if not msg:
                     break
-                if msg.startswith("JOINED "):
+                if prot.is_nickname_taken(msg):
+                    self._cb('on_nickname_taken')
+                    break
+                elif prot.is_error(msg):
+                    self._cb('on_error', prot.parse_error(msg))
+                    break
+                elif msg.startswith("JOINED "):
                     parts = msg.strip().split()
                     if len(parts) == 5:
                         nickname, ip, udp_port, tcp_port = parts[1], parts[2], int(parts[3]), int(parts[4])
@@ -70,10 +69,9 @@ class PeerClient:
                             del self.peers[nickname]
                         self._cb('on_peer_left_server', nickname)
                 elif msg.startswith("BROADCAST "):
-                    message = msg[len("BROADCAST "):]
-                    self._cb('on_broadcast', message)
+                    self._cb('on_broadcast', msg[len("BROADCAST "):])
                 elif msg.startswith("PORT "):
-                    port_info = parse_port(msg)
+                    port_info = prot.parse_port(msg)
                     if port_info:
                         nickname, tcp_port = port_info
                         if nickname in self.peers:
@@ -97,18 +95,16 @@ class PeerClient:
                             break
                         self._handle_peer_message(addr, msg, conn)
                 except Exception as e:
-                    # Only show popup for errors that are not normal disconnects
                     if not (isinstance(e, OSError) and (getattr(e, 'winerror', None) == 10054 or '10054' in str(e))):
                         self._cb('on_error', f"Peer connection error: {e}")
                 finally:
                     try:
-                        send_message(conn, make_left_chat(self.nickname))
+                        send_message(conn, prot.make_left_chat(self.nickname))
                     except:
                         pass
                     conn.close()
                     with self.lock:
-                        if addr in self.peer_socks:
-                            del self.peer_socks[addr]
+                        self.peer_socks.pop(addr, None)
                     self._cb('on_peer_disconnected', addr)
             threading.Thread(target=receive_messages, daemon=True).start()
             with self.lock:
@@ -143,17 +139,16 @@ class PeerClient:
                         self._cb('on_error', f"[Connection closed] {e}")
                 finally:
                     try:
-                        send_message(sock, make_left_chat(self.nickname))
+                        send_message(sock, prot.make_left_chat(self.nickname))
                     except:
                         pass
                     sock.close()
                     with self.lock:
-                        if addr in self.peer_socks:
-                            del self.peer_socks[addr]
+                        self.peer_socks.pop(addr, None)
                     self._cb('on_peer_disconnected', addr)
             threading.Thread(target=receive_messages, daemon=True).start()
             self._cb('on_peer_connected', addr)
-            send_message(sock, make_chat_request(self.nickname))
+            send_message(sock, prot.make_chat_request(self.nickname))
             return sock
         except Exception as e:
             self._cb('on_error', f"Failed to connect to peer: {e}")
@@ -161,7 +156,7 @@ class PeerClient:
 
     def send_message_to_peer(self, sock, msg):
         try:
-            send_message(sock, msg)
+            send_message(sock, prot.make_chat_msg(self.nickname, msg))
         except Exception as e:
             self._cb('on_error', f"Failed to send message: {e}")
 
@@ -170,47 +165,85 @@ class PeerClient:
             sock = self.peer_socks.get(addr)
             if sock:
                 try:
-                    send_message(sock, make_left_chat(self.nickname))
+                    send_message(sock, prot.make_left_chat(self.nickname))
                 except:
                     pass
                 try:
                     sock.close()
                 except:
                     pass
-                del self.peer_socks[addr]
+                self.peer_socks.pop(addr, None)
 
     def get_peer_nickname(self, addr):
-        """Return the nickname for a peer address, or fallback."""
         return self.peer_nicknames.get(addr) or f"Peer{addr[1]}"
 
     def _handle_peer_message(self, addr, msg, sock):
-        if is_chat_request(msg):
-            peer_nick = parse_chat_request(msg)
+        if prot.is_chat_request(msg):
+            peer_nick = prot.parse_chat_request(msg)
+            if not peer_nick:
+                send_message(sock, prot.make_error("Malformed CHAT_REQUEST"))
+                return
             self.peer_nicknames[addr] = peer_nick
+            responded = threading.Event()
             def respond(accept):
+                responded.set()
                 if accept:
-                    send_message(sock, make_chat_accept(self.nickname))
+                    send_message(sock, prot.make_chat_accept(self.nickname))
                     self._cb('on_peer_accepted', addr, peer_nick)
                 else:
-                    send_message(sock, make_chat_reject(self.nickname))
+                    send_message(sock, prot.make_chat_reject(self.nickname))
                     self._cb('on_peer_rejected', addr, peer_nick)
+            def timeout_watcher():
+                if not responded.wait(10):
+                    self._cb('on_error', f"No response to chat request from {peer_nick} at {addr} (timeout)")
+                    try:
+                        send_message(sock, prot.make_error("No response to chat request (timeout)"))
+                    except:
+                        pass
+                    try:
+                        sock.close()
+                    except:
+                        pass
+            threading.Thread(target=timeout_watcher, daemon=True).start()
             self._cb('on_chat_request', addr, peer_nick, respond)
             return
-        elif is_chat_accept(msg):
-            peer_nick = parse_chat_accept(msg)
+        elif prot.is_chat_accept(msg):
+            peer_nick = prot.parse_chat_accept(msg)
+            if not peer_nick:
+                send_message(sock, prot.make_error("Malformed CHAT_ACCEPT"))
+                return
             self.peer_nicknames[addr] = peer_nick
             self._cb('on_chat_accept', addr, peer_nick)
             return
-        elif is_chat_reject(msg):
-            peer_nick = parse_chat_reject(msg)
+        elif prot.is_chat_reject(msg):
+            peer_nick = prot.parse_chat_reject(msg)
+            if not peer_nick:
+                send_message(sock, prot.make_error("Malformed CHAT_REJECT"))
+                return
             self.peer_nicknames[addr] = peer_nick
             self._cb('on_chat_reject', addr, peer_nick)
             return
-        elif is_left_chat(msg):
-            peer_nick = parse_left_chat(msg)
+        elif prot.is_left_chat(msg):
+            peer_nick = prot.parse_left_chat(msg)
+            if not peer_nick:
+                send_message(sock, prot.make_error("Malformed LEFT_CHAT"))
+                return
             self._cb('on_peer_left', addr, peer_nick)
             return
-        self._cb('on_peer_message', addr, msg)
+        elif prot.is_chat_msg(msg):
+            parsed = prot.parse_chat_msg(msg)
+            if parsed:
+                _, message = parsed
+                self._cb('on_peer_message', addr, message)
+            else:
+                send_message(sock, prot.make_error("Malformed CHAT_MSG"))
+            return
+        elif prot.is_error(msg):
+            self._cb('on_error', f"Peer error: {prot.parse_error(msg)}")
+            return
+        else:
+            send_message(sock, prot.make_error("Unknown or unexpected peer message"))
+            self._cb('on_error', f"Received unknown peer message: {msg}")
 
     def start_udp_listener(self, on_message):
         listen_for_udp(self.udp_port, on_message)

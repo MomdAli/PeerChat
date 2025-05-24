@@ -25,6 +25,20 @@ class ChatArea(ttk.Frame):
                            highlightthickness=1)
         self.text.pack(fill='both', expand=True, padx=2)
 
+        # Configure color tags for different message types
+        self.text.tag_config('timestamp', foreground=COLORS['timestamp'])
+        self.text.tag_config('user', foreground=COLORS['user_text'])
+        self.text.tag_config('peer', foreground=COLORS['peer_text'])
+        self.text.tag_config('system', foreground=COLORS['system_info'])
+        self.text.tag_config('error', foreground=COLORS['system_error'])
+        self.text.tag_config('broadcast', foreground=COLORS['broadcast'])
+        self.text.tag_config('left', foreground=COLORS['chat_left'])
+        self.text.tag_config('accept', foreground=COLORS['chat_accept'])
+        self.text.tag_config('reject', foreground=COLORS['chat_reject'])
+        self.text.tag_config('connected', foreground=COLORS['chat_connected'])
+        self.text.tag_config('disconnected', foreground=COLORS['chat_disconnected'])
+        self.text.tag_config('udp', foreground=COLORS['chat_udp'])
+
         # Create scrollbar
         scrollbar = ttk.Scrollbar(self, orient='vertical', command=self.text.yview)
         scrollbar.pack(side='right', fill='y')
@@ -40,18 +54,37 @@ class ChatArea(ttk.Frame):
             peer: Optional peer address for storing in specific chat history
         """
         if not color:
-            color = COLORS['text']
             if sender == self.nickname:
+                tag = 'user'
                 color = COLORS['user_text']
             elif sender == "System":
+                tag = 'system'
                 color = COLORS['system_info']
             else:
+                tag = 'peer'
                 color = COLORS['peer_text']
+        else:
+            # Map color to tag if possible
+            tag_map = {
+                COLORS['user_text']: 'user',
+                COLORS['peer_text']: 'peer',
+                COLORS['system_info']: 'system',
+                COLORS['system_error']: 'error',
+                COLORS['broadcast']: 'broadcast',
+                COLORS['chat_left']: 'left',
+                COLORS['chat_accept']: 'accept',
+                COLORS['chat_reject']: 'reject',
+                COLORS['chat_connected']: 'connected',
+                COLORS['chat_disconnected']: 'disconnected',
+                COLORS['chat_udp']: 'udp',
+            }
+            tag = tag_map.get(color, 'peer')
 
         self.text.configure(state="normal")
         timestamp = time.strftime("%H:%M:%S")
-        self.text.insert(tk.END, f"[{timestamp}] {sender}: ", color)
-        self.text.insert(tk.END, f"{message}\n", color)
+        self.text.insert(tk.END, f"[{timestamp}] ", 'timestamp')
+        self.text.insert(tk.END, f"{sender}: ", tag)
+        self.text.insert(tk.END, f"{message}\n", tag)
         self.text.configure(state="disabled")
         self.text.see(tk.END)
 
@@ -70,9 +103,16 @@ class ChatArea(ttk.Frame):
 
         if peer_addr in self.chat_history:
             for sender, message, color in self.chat_history[peer_addr]:
+                if sender == self.nickname:
+                    tag = 'user'
+                elif sender == "System":
+                    tag = 'system'
+                else:
+                    tag = 'peer'
                 timestamp = time.strftime("%H:%M:%S")
-                self.text.insert(tk.END, f"[{timestamp}] {sender}: ", color)
-                self.text.insert(tk.END, f"{message}\n", color)
+                self.text.insert(tk.END, f"[{timestamp}] ", 'timestamp')
+                self.text.insert(tk.END, f"{sender}: ", tag)
+                self.text.insert(tk.END, f"{message}\n", tag)
 
         self.text.configure(state="disabled")
         self.text.see(tk.END)
