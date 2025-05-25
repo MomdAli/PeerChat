@@ -8,7 +8,7 @@ A modern, modular peer-to-peer chat application with a beautiful Catppuccin Moch
 
 ## Overview
 
-**PeerChat** lets you chat directly with peers on your network, featuring a sleek, themed GUI, real-time peer discovery, and robust, modular code. Built as a project for HTWG's Rechnernetze course, it's designed for both learning and fun!
+**PeerChat** lets you chat directly with peers on your network, featuring a sleek, themed GUI, real-time peer discovery, and robust, modular code.
 
 ---
 
